@@ -5,17 +5,754 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Batman CBS Savaş Oyunu</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Genel */
+    * { box-sizing: border-box; }
+    html, body { 
+      height: 100%; 
+      margin: 0; 
+      padding: 0; 
+      font-family: "Segoe UI", Roboto, Arial, sans-serif; 
+      background: #000; 
+      color: #fff; 
+      overflow: hidden;
+    }
+
+    /* Harita */
+    #map {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      z-index: 0;
+    }
+
+    /* HUD (üst sol) */
+    #hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(0,0,0,0.85);
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      backdrop-filter: blur(4px);
+      min-width: 180px;
+    }
+
+    .hud-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .hud-label {
+      font-size: 14px;
+      color: #ccc;
+    }
+
+    .hud-value {
+      font-size: 16px;
+      font-weight: bold;
+      padding: 4px 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      min-width: 50px;
+      text-align: center;
+    }
+
+    #healthValue {
+      color: #ff4444;
+    }
+
+    #scoreValue {
+      color: #ffd700;
+    }
+
+    /* Detektif butonu */
+    #detectiveBtn {
+      cursor: pointer;
+      background: linear-gradient(180deg,#444,#222);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      margin-top: 5px;
+    }
+    #detectiveBtn:hover {
+      background: linear-gradient(180deg,#555,#333);
+    }
+    #detectiveBtn.active {
+      background: linear-gradient(180deg,#ffd700,#ffaa00);
+      color: #000;
+      box-shadow: 0 0 15px rgba(255,215,0,0.5);
+    }
+
+    /* Batman ikon */
+    .leaflet-marker-icon.batman-icon {
+      border-radius: 6px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+      filter: drop-shadow(0 0 5px rgba(0, 0, 255, 0.7));
+    }
+
+    /* Düşman stil */
+    .enemy div {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: red;
+      box-shadow: 0 0 12px rgba(255,0,0,0.8);
+      border: 2px solid rgba(0,0,0,0.4);
+      animation: enemyPulse 1.5s infinite;
+    }
+    
+    @keyframes enemyPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    /* Joker boss */
+    .joker div {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background: linear-gradient(45deg, #8b00ff, #ff00ff);
+      box-shadow: 0 0 25px rgba(139, 0, 255, 0.9);
+      border: 3px solid rgba(255,255,255,0.4);
+      animation: jokerPulse 2s infinite;
+      position: relative;
+    }
+    
+    .joker div::after {
+      content: "🤡";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 24px;
+    }
+    
+    @keyframes jokerPulse {
+      0% { transform: scale(1); box-shadow: 0 0 25px rgba(139, 0, 255, 0.9); }
+      50% { transform: scale(1.15); box-shadow: 0 0 35px rgba(255, 0, 255, 0.9); }
+      100% { transform: scale(1); box-shadow: 0 0 25px rgba(139, 0, 255, 0.9); }
+    }
+
+    /* Gizli nesne stil */
+    .hidden div {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ffff00, #ffaa00);
+      box-shadow: 0 0 15px rgba(255,255,0,0.9);
+      border: 2px solid rgba(0,0,0,0.3);
+      transform: scale(1);
+      transition: transform 0.15s ease;
+      animation: hiddenPulse 2s infinite;
+    }
+    
+    @keyframes hiddenPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+
+    /* Batarang */
+    .batarang {
+      background: radial-gradient(circle, #00aaff, #0044ff);
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgba(0,100,255,0.9);
+      animation: batarangSpin 0.5s linear infinite;
+    }
+    
+    @keyframes batarangSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Görev paneli */
+    #questPanel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 1000;
+      background: rgba(0,0,0,0.85);
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      backdrop-filter: blur(4px);
+      max-width: 300px;
+    }
+    
+    #questPanel h3 {
+      margin-top: 0;
+      color: #ffd700;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      padding-bottom: 8px;
+      text-align: center;
+    }
+    
+    #questList {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    #questList li {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      align-items: center;
+    }
+    
+    #questList li:before {
+      content: "•";
+      color: #ffd700;
+      margin-right: 8px;
+    }
+    
+    #questList li.completed {
+      color: #0f0;
+      text-decoration: line-through;
+    }
+    
+    #questList li.completed:before {
+      content: "✓";
+      color: #0f0;
+    }
+    
+    /* Joker sağlık çubuğu */
+    #jokerHealth {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      width: 300px;
+      height: 25px;
+      background: rgba(0,0,0,0.8);
+      border-radius: 12px;
+      border: 2px solid rgba(255,255,255,0.3);
+      overflow: hidden;
+      display: none;
+      box-shadow: 0 0 10px rgba(139, 0, 255, 0.7);
+    }
+    
+    #jokerHealthBar {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ff0000, #ff6a00, #ffff00);
+      transition: width 0.3s ease;
+      border-radius: 10px;
+    }
+    
+    #jokerHealthText {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px black;
+    }
+    
+    /* Mesaj kutusu */
+    #messageBox {
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(0,0,0,0.9);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 10px;
+      border: 2px solid rgba(255,215,0,0.7);
+      text-align: center;
+      max-width: 80%;
+      display: none;
+      font-weight: bold;
+      box-shadow: 0 0 15px rgba(255,215,0,0.5);
+      animation: messagePulse 2s infinite;
+    }
+    
+    @keyframes messagePulse {
+      0% { border-color: rgba(255,215,0,0.7); box-shadow: 0 0 15px rgba(255,215,0,0.5); }
+      50% { border-color: rgba(255,100,0,0.9); box-shadow: 0 0 20px rgba(255,100,0,0.7); }
+      100% { border-color: rgba(255,215,0,0.7); box-shadow: 0 0 15px rgba(255,215,0,0.5); }
+    }
+
+    /* Kontrol bilgisi */
+    #controls {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      z-index: 1000;
+      background: rgba(0,0,0,0.8);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      font-size: 12px;
+      max-width: 220px;
+    }
+    
+    #controls h4 {
+      margin: 0 0 8px 0;
+      color: #ffd700;
+      text-align: center;
+    }
+    
+    .control-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    
+    .control-key {
+      background: rgba(255,255,255,0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
   <div id="hud">
-    <span id="score">Skor: 0</span>
-    <span id="health">Can: 3</span>
-    <button id="detectiveBtn">Detektif Modu</button>
+    <div class="hud-item">
+      <span class="hud-label">SKOR:</span>
+      <span id="scoreValue" class="hud-value">0</span>
+    </div>
+    <div class="hud-item">
+      <span class="hud-label">CAN:</span>
+      <span id="healthValue" class="hud-value">3</span>
+    </div>
+    <div class="hud-item">
+      <span class="hud-label">GİZLİ NESNE:</span>
+      <span id="itemValue" class="hud-value">0/5</span>
+    </div>
+    <button id="detectiveBtn">DETEKTİF MODU</button>
   </div>
+  
+  <div id="questPanel">
+    <h3>GÖREVLER</h3>
+    <ul id="questList">
+      <li id="quest1">5 gizli nesne topla</li>
+      <li id="quest2">10 düşmanı yen</li>
+      <li id="quest3">Joker'i yen</li>
+    </ul>
+  </div>
+  
+  <div id="jokerHealth">
+    <div id="jokerHealthBar"></div>
+    <div id="jokerHealthText">JOKER CAN: 100%</div>
+  </div>
+  
+  <div id="messageBox"></div>
+
+  <div id="controls">
+    <h4>KONTROLLER</h4>
+    <div class="control-item">
+      <span>Hareket:</span>
+      <span class="control-key">Yön Tuşları</span>
+    </div>
+    <div class="control-item">
+      <span>Batarang At:</span>
+      <span class="control-key">Boşluk</span>
+    </div>
+    <div class="control-item">
+      <span>Detektif Modu:</span>
+      <span class="control-key">D Tuşu</span>
+    </div>
+  </div>
+  
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="script.js"></script>
+  <script>
+    // Harita
+    const map = L.map('map').setView([39.8858, 32.6258], 18);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+
+    // Batman
+    const batmanIcon = L.icon({
+      iconUrl:'https://upload.wikimedia.org/wikipedia/tr/4/40/Batmanlee.png',
+      iconSize:[50,50], iconAnchor:[25,25],
+      className: 'batman-icon'
+    });
+    let batmanMarker = L.marker([39.8858,32.6258],{icon:batmanIcon}).addTo(map);
+
+    // HUD
+    let score = 0, health = 3;
+    const scoreValue = document.getElementById("scoreValue");
+    const healthValue = document.getElementById("healthValue");
+    const itemValue = document.getElementById("itemValue");
+    const detectiveBtn = document.getElementById("detectiveBtn");
+    const jokerHealthBar = document.getElementById("jokerHealthBar");
+    const jokerHealthText = document.getElementById("jokerHealthText");
+    const jokerHealthContainer = document.getElementById("jokerHealth");
+    const messageBox = document.getElementById("messageBox");
+
+    // Görevler
+    let collectedItems = 0;
+    let defeatedEnemies = 0;
+    let jokerDefeated = false;
+    const quest1El = document.getElementById("quest1");
+    const quest2El = document.getElementById("quest2");
+    const quest3El = document.getElementById("quest3");
+
+    // Düşmanlar
+    let enemies = [];
+    function spawnEnemy(){
+      let lat = 39.8845 + Math.random()*0.003; 
+      let lng = 32.6240 + Math.random()*0.003;
+      let e = L.marker([lat,lng],{
+        icon:L.divIcon({
+          className:'enemy', 
+          html:'<div></div>'
+        })
+      }).addTo(map);
+      enemies.push(e);
+    }
+    for(let i=0;i<3;i++) spawnEnemy();
+
+    // Gizli nesneler
+    let hiddenItems = [];
+    function spawnHiddenItem(lat, lng) {
+      let item = L.marker([lat,lng],{
+        icon: L.divIcon({
+          className:'hidden', 
+          html:'<div></div>'
+        })
+      }).addTo(map);
+      item.setOpacity(0); // başta görünmez
+      hiddenItems.push(item);
+      return item;
+    }
+    
+    // 5 gizli nesne oluştur
+    spawnHiddenItem(39.8859,32.6255);
+    spawnHiddenItem(39.8856,32.6262);
+    spawnHiddenItem(39.8862,32.6250);
+    spawnHiddenItem(39.8850,32.6265);
+    spawnHiddenItem(39.8848,32.6252);
+
+    // Joker
+    let joker = null;
+    let jokerHealth = 100;
+    let jokerSpawned = false;
+    
+    function spawnJoker() {
+      if (jokerSpawned) return;
+      
+      // Batman'den uzak bir konumda Joker oluştur
+      let batmanPos = batmanMarker.getLatLng();
+      let lat, lng;
+      
+      do {
+        lat = batmanPos.lat + (Math.random() - 0.5) * 0.004;
+        lng = batmanPos.lng + (Math.random() - 0.5) * 0.004;
+      } while (Math.abs(lat - batmanPos.lat) < 0.001 && Math.abs(lng - batmanPos.lng) < 0.001);
+      
+      joker = L.marker([lat,lng],{
+        icon: L.divIcon({
+          className:'joker', 
+          html:'<div></div>'
+        })
+      }).addTo(map);
+      
+      jokerSpawned = true;
+      jokerHealthContainer.style.display = 'block';
+      updateJokerHealth();
+      showMessage("JOKER ORTAYA ÇIKTI! DİKKATLİ OL!");
+      
+      // Joker'in Batman'i takip etmesi
+      setInterval(() => {
+        if (joker && jokerSpawned) {
+          let jokerPos = joker.getLatLng();
+          let batmanPos = batmanMarker.getLatLng();
+          
+          // Batman'e doğru hareket et
+          let dx = batmanPos.lng - jokerPos.lng;
+          let dy = batmanPos.lat - jokerPos.lat;
+          
+          // Mesafe kontrolü
+          let distance = Math.sqrt(dx*dx + dy*dy);
+          if (distance > 0.0005) { // Çok yakına gelmesin
+            let speed = 0.0001;
+            dx = (dx / distance) * speed;
+            dy = (dy / distance) * speed;
+            
+            joker.setLatLng([jokerPos.lat + dy, jokerPos.lng + dx]);
+          }
+        }
+      }, 1000);
+    }
+
+    // Bataranglar
+    let batarangs = [];
+    let lastShotTime = 0;
+    const shotCooldown = 400; // milisaniye
+
+    // Karakter hareketi ve tuşlar
+    let detectiveMode = false;
+    window.addEventListener('keydown', e => {
+      let latlng = batmanMarker.getLatLng();
+      let step = 0.0003;
+      if(e.key === "ArrowUp") latlng.lat += step;
+      if(e.key === "ArrowDown") latlng.lat -= step;
+      if(e.key === "ArrowLeft") latlng.lng -= step;
+      if(e.key === "ArrowRight") latlng.lng += step;
+      batmanMarker.setLatLng(latlng);
+      checkCollisions(latlng);
+
+      if(e.key === " " && Date.now() - lastShotTime > shotCooldown) {
+        shootBatarang(latlng);
+        lastShotTime = Date.now();
+      }
+      
+      if(e.key === "d" || e.key === "D") toggleDetectiveMode();
+    });
+
+    // Detektif modu butonu
+    detectiveBtn.addEventListener('click', toggleDetectiveMode);
+
+    // Detektif modu
+    function toggleDetectiveMode(){
+      detectiveMode = !detectiveMode;
+      detectiveBtn.classList.toggle('active', detectiveMode);
+      hiddenItems.forEach(item => item.setOpacity(detectiveMode ? 1 : 0));
+      
+      if (detectiveMode) {
+        showMessage("DETEKTİF MODU AKTİF");
+      }
+    }
+
+    // Batarang atma
+    function shootBatarang(pos){
+      // En yakın düşmanı bul
+      let nearestEnemy = null;
+      let minDistance = Infinity;
+      
+      enemies.forEach(enemy => {
+        let enemyPos = enemy.getLatLng();
+        let distance = pos.distanceTo(enemyPos);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestEnemy = enemy;
+        }
+      });
+      
+      // Eğer Joker varsa ve yakınsa, Joker'i hedefle
+      if (joker) {
+        let jokerPos = joker.getLatLng();
+        let jokerDistance = pos.distanceTo(jokerPos);
+        if (jokerDistance < minDistance) {
+          nearestEnemy = joker;
+          minDistance = jokerDistance;
+        }
+      }
+      
+      // Batarang oluştur
+      let b = L.circleMarker([pos.lat, pos.lng],{
+        radius:6,
+        color:'#0044ff',
+        className: 'batarang'
+      }).addTo(map);
+      
+      // Hedefe doğru yön belirle
+      let targetPos;
+      if (nearestEnemy) {
+        targetPos = nearestEnemy.getLatLng();
+      } else {
+        // Eğer hedef yoksa, Batman'in baktığı yöne git
+        targetPos = L.latLng(
+          pos.lat + 0.001,
+          pos.lng
+        );
+      }
+      
+      // Hedefe doğru yön vektörü hesapla
+      let dx = targetPos.lng - pos.lng;
+      let dy = targetPos.lat - pos.lat;
+      
+      // Vektörü normalize et
+      let length = Math.sqrt(dx * dx + dy * dy);
+      dx /= length;
+      dy /= length;
+      
+      // Hız faktörü
+      let speed = 0.0006;
+      
+      batarangs.push({
+        marker: b, 
+        dir: [dy * speed, dx * speed],
+        target: nearestEnemy
+      });
+    }
+
+    // Düşman rastgele hareketi
+    function moveEnemies(){
+      enemies.forEach(e => {
+        let pos = e.getLatLng();
+        let dx = (Math.random()-0.5)*0.0002;
+        let dy = (Math.random()-0.5)*0.0002;
+        e.setLatLng([pos.lat+dy, pos.lng+dx]);
+      });
+    }
+    setInterval(moveEnemies, 800);
+
+    // Batarang hareketi
+    setInterval(()=>{
+      for(let i=batarangs.length-1; i>=0; i--){
+        let b = batarangs[i];
+        let latlng = b.marker.getLatLng();
+        latlng.lat += b.dir[0];
+        latlng.lng += b.dir[1];
+        b.marker.setLatLng(latlng);
+
+        // Düşmanlarla çarpışma kontrolü
+        let hit = false;
+        for(let j=enemies.length-1; j>=0; j--){
+          let e = enemies[j];
+          if(latlng.distanceTo(e.getLatLng())<20){
+            map.removeLayer(e);
+            enemies.splice(j,1);
+            score += 20;
+            defeatedEnemies++;
+            updateQuestProgress();
+            scoreValue.textContent = score;
+            hit = true;
+            showMessage("DÜŞMAN YENİLDİ! +20 PUAN");
+            setTimeout(spawnEnemy, 1500); // yeni düşman
+            break;
+          }
+        }
+        
+        // Joker ile çarpışma kontrolü
+        if (!hit && joker && latlng.distanceTo(joker.getLatLng())<25) {
+          jokerHealth -= 15;
+          updateJokerHealth();
+          hit = true;
+          
+          if (jokerHealth <= 0) {
+            map.removeLayer(joker);
+            joker = null;
+            jokerSpawned = false;
+            jokerDefeated = true;
+            jokerHealthContainer.style.display = 'none';
+            score += 200;
+            scoreValue.textContent = score;
+            updateQuestProgress();
+            showMessage("TEBRİKLER! JOKER'İ YENDİN! +200 PUAN");
+          } else {
+            showMessage("JOKER'E İSABET! CANI: " + jokerHealth);
+          }
+        }
+
+        // Batarang sınırların dışına çıktıysa veya hedefi vurduysa kaldır
+        if(hit || latlng.lat>39.888 || latlng.lat<39.883 || latlng.lng>32.628 || latlng.lng<32.622){
+          map.removeLayer(b.marker);
+          batarangs.splice(i,1);
+        }
+      }
+    }, 50);
+
+    // Çarpışma kontrolü
+    function checkCollisions(batmanPos){
+      // Düşmanlarla çarpışma
+      for(let i=enemies.length-1; i>=0; i--){
+        if(batmanPos.distanceTo(enemies[i].getLatLng())<20){
+          health--;
+          healthValue.textContent = health;
+          map.removeLayer(enemies[i]);
+          enemies.splice(i,1);
+          setTimeout(spawnEnemy, 2000); // yeni düşman
+          
+          if(health <= 0){
+            alert("OYUN BİTTİ! Skorunuz: " + score);
+            location.reload();
+          } else {
+            showMessage("DÜŞMANA ÇARPTIN! CANIN: " + health);
+          }
+        }
+      }
+
+      // Gizli öğelerle çarpışma
+      for(let i=0; i<hiddenItems.length; i++){
+        let item = hiddenItems[i];
+        if(batmanPos.distanceTo(item.getLatLng())<20){
+          score += 15;
+          collectedItems++;
+          updateQuestProgress();
+          scoreValue.textContent = score;
+          itemValue.textContent = collectedItems + "/5";
+          map.removeLayer(item);
+          hiddenItems.splice(i,1);
+          showMessage("GİZLİ NESNE TOPLANDI! +15 PUAN");
+          
+          // 3. gizli nesneden sonra Joker'i ortaya çıkar
+          if (collectedItems === 3 && !jokerSpawned) {
+            showMessage("JOKER YAKINLARDA! DİKKATLİ OL!");
+            setTimeout(spawnJoker, 2000);
+          }
+        }
+      }
+      
+      // Joker ile çarpışma
+      if (joker && batmanPos.distanceTo(joker.getLatLng())<30) {
+        health -= 1;
+        healthValue.textContent = health;
+        
+        if(health <= 0){
+          alert("OYUN BİTTİ! Skorunuz: " + score);
+          location.reload();
+        } else {
+          showMessage("JOKER SALDIRDI! CANIN: " + health);
+        }
+      }
+    }
+    
+    // Joker sağlık çubuğunu güncelle
+    function updateJokerHealth() {
+      jokerHealthBar.style.width = jokerHealth + '%';
+      jokerHealthText.textContent = "JOKER CAN: " + jokerHealth + "%";
+    }
+    
+    // Görev ilerlemesini güncelle
+    function updateQuestProgress() {
+      if (collectedItems >= 5) {
+        quest1El.classList.add('completed');
+      }
+      
+      if (defeatedEnemies >= 10) {
+        quest2El.classList.add('completed');
+      }
+      
+      if (jokerDefeated) {
+        quest3El.classList.add('completed');
+      }
+    }
+    
+    // Mesaj göster
+    function showMessage(text) {
+      messageBox.textContent = text;
+      messageBox.style.display = 'block';
+      setTimeout(() => {
+        messageBox.style.display = 'none';
+      }, 3000);
+    }
+    
+    // Oyun başlangıç mesajı
+    setTimeout(() => {
+      showMessage("GÖREVLERİ TAMAMLA VE JOKER'İ YEN!");
+    }, 1000);
+  </script>
 </body>
-</html>
+</html>d
